@@ -1,0 +1,69 @@
+import json
+import boto3
+from datetime import datetime
+import random
+import statistics
+from decimal import Decimal
+
+s3 = boto3.client('s3')
+dynamo = boto3.resource('dynamodb')
+
+S3_BUCKET = "data-storage132"
+DDB_TABLE = "IoT_receptor"
+
+last_values = []
+
+def lambda_handler(event, context):
+
+    # Leer payload
+    if "payload" in event:
+        payload = event["payload"]
+        data = json.loads(payload)
+    else:
+        data = event
+
+    timestamp = data.get("timestamp", datetime.utcnow().isoformat())
+    temperature = float(data.get("temperature", 0))
+    humidity = float(data.get("humidity", 0))
+    device_id = data.get("device_id", f"sensor_{random.randint(1,10):03}")
+
+    # Generar ID único
+    item_id = f"{device_id}-{timestamp}"
+
+    # --- Guardar en S3 ---
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=f"{device_id}/{timestamp}.json",
+        Body=json.dumps(data)
+    )
+    print(f"Guardado en S3: {device_id}/{timestamp}.json")
+
+    # --- Guardar en DynamoDB ---
+    table = dynamo.Table(DDB_TABLE)
+    table.put_item(Item={
+        "id": item_id,  # clave primaria obligatoria
+        "device_id": device_id,
+        "timestamp": timestamp,
+        "temperature": Decimal(str(temperature)),
+        "humidity": Decimal(str(humidity))
+    })
+    print(f"Guardado en DynamoDB: {device_id} - {timestamp}")
+
+    # --- Detección de anomalías ---
+    global last_values
+    last_values.append(temperature)
+    if len(last_values) > 20:
+        last_values = last_values[-20:]
+
+    if len(last_values) > 5:
+        mean = statistics.mean(last_values)
+        stdev = statistics.stdev(last_values)
+        if stdev > 0:
+            z = (temperature - mean) / stdev
+            if abs(z) > 2.5:
+                print(f"⚠ ANOMALÍA DETECTADA: {temperature} (z={round(z,2)})")
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps("Datos guardados y procesados correctamente")
+    }
