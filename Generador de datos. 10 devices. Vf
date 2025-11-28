@@ -1,0 +1,44 @@
+import json
+import boto3
+import time
+from datetime import datetime
+import random
+
+def lambda_handler(event, context):
+
+    # Configurar IoT Core client
+    iot_client = boto3.client('iot-data', region_name='us-east-1')
+
+    # Tiempo máximo: 5 minutos (300 segundos)
+    end_time = time.time() + 300
+
+    while time.time() < end_time:
+
+        # Generar datos para 10 dispositivos
+        for device_num in range(1, 11):
+            device_id = f"sensor_{device_num:03}"
+
+            sensor_data = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "temperature": round(20 + random.uniform(-5, 5), 2),
+                "humidity": round(50 + random.uniform(-10, 10), 2),
+                "pressure": round(1000 + random.uniform(-50, 50), 2),
+                "device_id": device_id
+            }
+
+            # Publicar a IoT Core
+            iot_client.publish(
+                topic='iot/sensor/data',
+                qos=1,
+                payload=json.dumps(sensor_data)
+            )
+
+            print(f"Datos enviados: {sensor_data}")
+
+        # Esperar 5 segundos antes del siguiente envío
+        time.sleep(5)
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Datos enviados exitosamente')
+    }
