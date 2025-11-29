@@ -1,0 +1,51 @@
+import json
+import boto3
+from datetime import datetime
+import random
+import statistics
+from decimal import Decimal
+
+s3 = boto3.client('s3')
+dynamo = boto3.resource('dynamodb')
+
+S3_BUCKET = "data-storage132"
+DDB_TABLE = "IoT_receptor"
+
+def lambda_handler(event, context):
+
+    table = dynamo.Table(DDB_TABLE)
+
+    for i in range(10):  # ⭐ Generamos 10 registros por ejecución
+        device_id = f"sensor_{i+1:03}"
+        timestamp = datetime.utcnow().isoformat()
+
+        # Datos simulados en caso de que el payload venga vacío
+        temperature = round(random.uniform(15, 35), 2)
+        humidity = round(random.uniform(40, 90), 2)
+
+        item_id = f"{device_id}-{timestamp}"
+
+        data = {
+            "id": item_id,
+            "device_id": device_id,
+            "timestamp": timestamp,
+            "temperature": Decimal(str(temperature)),
+            "humidity": Decimal(str(humidity))
+        }
+
+        # Guardar individual en S3
+        s3.put_object(
+            Bucket=S3_BUCKET,
+            Key=f"{device_id}/{timestamp}.json",
+            Body=json.dumps(data, default=str)
+        )
+
+        # Guardar en DynamoDB
+        table.put_item(Item=data)
+
+        print(f"Guardado -> {device_id} @ {timestamp}")
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps("10 registros generados y procesados correctamente")
+    }
