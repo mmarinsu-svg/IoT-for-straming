@@ -1,0 +1,89 @@
+import json
+import boto3
+from decimal import Decimal
+from datetime import datetime
+
+# --- CONFIGURACIÓN DE SERVICIOS ---
+s3 = boto3.client('s3')
+sns = boto3.client('sns')
+dynamo = boto3.resource('dynamodb')
+
+# ==========================================
+# ¡CAMBIA ESTO POR TUS DATOS!
+# ==========================================
+# Nombre exacto de tu bucket S3
+BUCKET_NAME = "datalake-iot-henry"  
+# Tu ARN de SNS (sin la parte final de la suscripción)
+SNS_ARN = "arn:aws:sns:us-east-1:359383093074:AlertasIoT"
+TABLE_NAME = "IoT_receptor"
+
+def lambda_handler(event, context):
+    records_to_process = []
+
+    # 1. Lógica inteligente: ¿Llegó un lote (batch) o un dato suelto?
+    if 'batch' in event:
+        print(f"📦 Procesando Batch de {len(event['batch'])} registros")
+        records_to_process = event['batch']
+    else:
+        # Soporte para el simulador viejo (por si acaso)
+        print("📨 Procesando registro único")
+        records_to_process = [event]
+
+    table = dynamo.Table(TABLE_NAME)
+
+    for data in records_to_process:
+        try:
+            
+            # --- NUEVA LÍNEA: Imprimir para que CloudWatch lo vea ---
+            print(f"TELEMETRIA: {json.dumps(data)}")
+
+            # --- A. PREPARAR DATOS ---
+            device_id = data.get("device_id", "unknown")
+            timestamp = data.get("timestamp", datetime.utcnow().isoformat())
+            
+            # Conversión necesaria para base de datos
+            item = {
+                'id': f"{device_id}-{timestamp}",
+                'device_id': device_id,
+                'timestamp': timestamp,
+                'temperature': Decimal(str(data['temperature'])),
+                'humidity': Decimal(str(data['humidity'])),
+                'lat': Decimal(str(data['location']['lat'])),
+                'lon': Decimal(str(data['location']['lon']))
+            }
+
+            # --- B. GUARDAR EN DYNAMODB (Hot Storage - Rápido) ---
+            table.put_item(Item=item)
+
+            # --- C. GUARDAR EN S3 (Data Lake - Histórico) ---
+            # Guardamos el archivo JSON organizado por carpetas
+            file_name = f"raw/{device_id}/{timestamp}.json"
+            try:
+                s3.put_object(
+                    Bucket=BUCKET_NAME,
+                    Key=file_name,
+                    Body=json.dumps(data)
+                )
+            except Exception as e:
+                print(f"Error guardando en S3: {e}")
+
+            # --- D. DETECTAR ANOMALÍA Y ALERTAR (SNS) ---
+            # Si la temperatura es > 48, ¡ALERTA!
+            if data['temperature'] > 48.0:
+                mensaje = f"🚨 ALERTA CRÍTICA: {device_id} reporta {data['temperature']}°C"
+                print(mensaje)
+                
+                try:
+                    sns.publish(
+                        TopicArn=SNS_ARN,
+                        Message=mensaje,
+                        Subject="Alerta IoT - Temperatura Alta"
+                    )
+                    print("✅ Correo de alerta enviado")
+                except Exception as e:
+                    print(f"Nota: No se pudo enviar correo: {e}")
+
+        except Exception as e:
+            print(f"Error procesando un registro: {e}")
+
+    return {'statusCode': 200, 'body': json.dumps('Proceso completado')}
