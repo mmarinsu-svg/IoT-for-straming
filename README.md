@@ -24,4 +24,4 @@ Este proyecto implementa una arquitectura Serverless en AWS para monitorear vari
 ![Diagrama de Arquitectura](docs/arquitectura.png)
 
 ## 📋 Autor
-[Tu Nombre] - Ingeniería Física - UNAL Medellín
+Mateo Marin, Henry Cifuentes - Ingeniería Física - UNAL Medellín
