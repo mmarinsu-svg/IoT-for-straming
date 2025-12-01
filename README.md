@@ -21,7 +21,7 @@ Este proyecto implementa una arquitectura Serverless en AWS para monitorear vari
 4. Ejecutar el simulador: `python src/simulador_iot.py`
 
 ## 📸 Arquitectura
-![Diagrama de Arquitectura](docs/arquitectura.png)
+<img width="792" height="361" alt="Diagrama sin título drawio (1)" src="https://github.com/user-attachments/assets/89ebace3-9fc2-4fa9-b68f-9b7ed7031dbd" />
 
 ## 📋 Autor
 Mateo Marin, Henry Cifuentes - Ingeniería Física - UNAL Medellín
